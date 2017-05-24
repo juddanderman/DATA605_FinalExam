@@ -1,0 +1,537 @@
+---
+title: "Data 605 Final Exam"
+author: "Judd Anderman"
+date: "May 24, 2017"
+output: html_document
+---
+
+```{r setup, echo = FALSE}
+## set working directory as needed
+setwd("~/DATA 605 Fundamentals of Computational Math/DATA605_FinalExam")
+```
+
+### Modeling
+
+#### Exploratory analysis & visualization
+
+```{r explore-1, fig.keep = 'all', fig.align = 'left', out.width = '100%'}
+train <- read.csv("train.csv", header = TRUE)
+test <- read.csv("test.csv", header = TRUE)
+
+str(train)
+sapply(train, summary)
+sapply(test, summary)
+
+## count missing values in each variable in `train` and `test`
+colSums(sapply(train, is.na))[colSums(sapply(train, is.na)) > 0]
+colSums(sapply(test, is.na))[colSums(sapply(test, is.na)) > 0]
+
+## check for duplicates
+nrow(train) - nrow(unique(train))
+nrow(test) - nrow(unique(test))
+
+par(mfrow = c(2, 4))
+for(row in 1:10) {
+  for (i in 1:4) {
+    j <- (row - 1) * 8 + i + 1
+    if (j == 80) {break}
+    if (is.numeric(train[[j]]) & 
+        length(unique(train[[j]])) >= 12) {
+      plot(density(train[[j]], na.rm = TRUE),
+           main = colnames(train)[j])
+    } else {
+      barplot(prop.table(table(train[[j]])), 
+              main = colnames(train)[j])
+    }
+  }
+}
+par(mfrow = c(2, 4))
+for(row in 1:10) {
+  for (i in 5:8) {
+    j <- (row - 1) * 8 + i + 1
+    if (j == 80) {break}
+    if (is.numeric(train[[j]]) & 
+        length(unique(train[[j]])) >= 12) {
+      plot(density(train[[j]], na.rm = TRUE),
+           main = colnames(train)[j])
+    } else {
+      barplot(prop.table(table(train[[j]])), 
+              main = colnames(train)[j])
+    }
+  }
+}
+```
+
+```{r explore-2, fig.keep = 'all', fig.align = 'left', out.width = '100%'}
+par(mfrow = c(2, 4))
+for(row in 1:10) {
+  for (i in 1:8) {
+    j <- (row - 1) * 8 + i + 1
+    if (j == 80) {break}
+    plot(train[[j]], train$SalePrice, main = colnames(train)[j])
+  }
+}
+```
+
+```{r corrplot}
+par(mfrow = c(1, 1))
+library(corrplot)
+cors <- 
+  cor(train[sapply(train, is.numeric) & 
+              sapply(train, 
+                     function(x) length(unique(x)) >= 5)][, -1],
+      use = "na.or.complete")
+corrplot(cors, method = "square")
+
+cors[, 31]
+```
+
+#### Data cleaning & pre-processing
+
+```{r recoding-feature-sel}
+kv_class <- 
+  data.frame(key = c(20, 30, 40, 45, 50, 60, 70, 75,
+               80, 85, 90, 120, 150, 160, 180, 190),
+             value = c("1StoryNew", "1StoryOld", 
+               "1StoryAttic", "1.5StoryUnf",
+               "1.5StoryFin", "2StoryNew",
+               "2StoryOld", "2.5Story",
+               "SplitLevel", "SplitFoyer",
+               "Duplex", "1StoryPUD",
+               "1.5StoryPUD", "2StoryPUD",
+               "MultiLevelPUD", "TwoFamConvert")
+  )
+
+replace_missing <- function(dataset) {
+  df <- dataset
+  i <- sapply(df, is.factor)
+  df[i] <- lapply(df[i], as.character)
+  df$MSSubClass <- 
+    sapply(df$MSSubClass, 
+           function(x) kv_class[kv_class$key == x, ]$value)
+  df$MSZoning[is.na(df$MSZoning)] <- "RL"
+  df$LotFrontage[is.na(df$LotFrontage)] <- median(df$LotFrontage, na.rm = TRUE)
+  df$Alley[is.na(df$Alley)] <- "None"
+  df$Utilities[is.na(df$Utilities)] <- "AllPub"
+  df$Exterior1st[is.na(df$Exterior1st)] <- "VinylSd"
+  df$Exterior2nd[is.na(df$Exterior2nd)] <- "VinylSd"
+  df$MasVnrType[is.na(df$MasVnrType)] <- "None"
+  df$MasVnrArea[is.na(df$MasVnrArea)] <- 0
+  df$BsmtQual[is.na(df$BsmtQual)] <- "None"
+  df$BsmtCond[is.na(df$BsmtCond)] <- "None"
+  df$BsmtExposure[is.na(df$BsmtExposure)] <- "None"
+  df$BsmtFinType1[is.na(df$BsmtFinType1)] <- "None"
+  df$BsmtFinSF1[is.na(df$BsmtFinSF1)] <- 0
+  df$BsmtFinType2[is.na(df$BsmtFinType2)] <- "None"
+  df$BsmtFinSF2[is.na(df$BsmtFinSF2)] <- 0
+  df$BsmtUnfSF[is.na(df$BsmtUnfSF)] <- 0
+  df$TotalBsmtSF[is.na(df$TotalBsmtSF)] <- 0
+  df$Electrical[is.na(df$Electrical)] <- "SBrkr"
+  df$BsmtFullBath[is.na(df$BsmtFullBath)] <- 0
+  df$BsmtHalfBath[is.na(df$BsmtHalfBath)] <- 0
+  df$KitchenQual[is.na(df$KitchenQual)] <- "TA"
+  df$Functional[is.na(df$Functional)] <- "Typ"
+  df$FireplaceQu[is.na(df$FireplaceQu)] <- "None"
+  df$GarageType[is.na(df$GarageType)] <- "None"
+  df$GarageYrBlt[is.na(df$GarageYrBlt)] <- min(df$GarageYrBlt, na.rm = TRUE)
+  df$GarageFinish[is.na(df$GarageFinish)] <- "None"
+  df$GarageCars[is.na(df$GarageCars)] <- 0
+  df$GarageArea[is.na(df$GarageArea)] <- 0
+  df$GarageQual[is.na(df$GarageQual)] <- "None"
+  df$GarageCond[is.na(df$GarageCond)] <- "None"
+  df$PoolQC[is.na(df$PoolQC)] <- "None"
+  df$Fence[is.na(df$Fence)] <- "None"
+  df$MiscFeature[is.na(df$MiscFeature)] <- "None"
+  df$SaleType[is.na(df$SaleType)] <- "WD"
+  i <- sapply(df, is.character)
+  df[i] <- lapply(df[i], as.factor)
+  return(df)
+}
+
+kv_bldg_type <- 
+  data.frame(key = c("2fmCon", "Duplex", "Twnhs", "TwnhsE", "1Fam"),
+             value = 1:5
+  )
+
+kv_ext_qual <- 
+  data.frame(key = c("Po", "Fa", "TA", "Gd", "Ex"),
+             value = 1:5)
+
+kv_ext_cond <- 
+  data.frame(key = c("Po", "Fa", "TA", "Gd", "Ex"),
+             value = 1:5)
+
+kv_bsmt_qual <- 
+  data.frame(key = c("None", "Po", "Fa", "TA", "Gd", "Ex"),
+             value = 0:5)
+
+kv_bsmt_cond <- 
+  data.frame(key = c("Po", "None", "Fa", "TA", "Gd", "Ex"),
+             value = 0:5)
+
+kv_bsmt_exp <- 
+  data.frame(key = c("None", "No", "Mn", "Av", "Gd"),
+             value = 0:4)
+
+kv_heat_qc <- 
+  data.frame(key = c("Po", "Fa", "TA", "Gd", "Ex"),
+             value = 1:5)
+
+kv_electrical <-
+  data.frame(key = c("Mix", "FuseP", "FuseF", "FuseA", "SBrkr"),
+             value = 1:5)
+
+kv_kitchen <- 
+  data.frame(key = c("Po", "Fa", "TA", "Gd", "Ex"),
+             value = 1:5)
+
+kv_fireplace_q <- 
+  data.frame(key = c("Po", "None", "Fa", "TA", "Gd", "Ex"),
+             value = 0:5)
+
+kv_garage_fin <- 
+  data.frame(key = c("None", "Unf", "RFn", "Fin"),
+             value = 0:3)
+
+kv_paved_drive <- 
+  data.frame(key = c("N", "P", "Y"), value = 1:3)
+
+recode <- function(dataset) {
+  # categorical
+  df <- dataset
+  i <- sapply(df, is.factor)
+  df[i] <- lapply(df[i], as.character)
+  df$BldgType <- 
+    sapply(df$BldgType, 
+           function(x) kv_bldg_type[kv_bldg_type$key == x, ]$value)
+  df$ExterQual <- 
+    sapply(df$ExterQual, 
+           function(x) kv_ext_qual[kv_ext_qual$key == x, ]$value)
+  df$ExterCond <- 
+    sapply(df$ExterCond, 
+           function(x) kv_ext_cond[kv_ext_cond$key == x, ]$value)
+  df$BsmtQual <- 
+    sapply(df$BsmtQual, 
+           function(x) kv_bsmt_qual[kv_bsmt_qual$key == x, ]$value)
+  df$BsmtCond <- 
+    sapply(df$BsmtCond, 
+           function(x) kv_bsmt_cond[kv_bsmt_cond$key == x, ]$value)
+  df$BsmtExposure <- 
+    sapply(df$BsmtExposure, 
+           function(x) kv_bsmt_exp[kv_bsmt_exp$key == x, ]$value)
+  df$BsmtFinType1 <- 
+    ifelse(df$BsmtFinType1 == "GLQ", 2, 
+           ifelse(df$BsmtFinType1 == "None", 0, 1))
+  df$HeatingQC <- 
+    sapply(df$HeatingQC, 
+           function(x) kv_heat_qc[kv_heat_qc$key == x, ]$value)
+  df$CentralAir <- ifelse(df$CentralAir == "Y", 1, 0)
+  df$Electrical <- 
+    sapply(df$Electrical,
+           function(x) kv_electrical[kv_electrical$key == x, ]$value)
+  df$KitchenQual <-
+    sapply(df$KitchenQual,
+           function(x) kv_kitchen[kv_kitchen$key == x, ]$value)
+  df$FireplaceQu <-
+    sapply(df$FireplaceQu,
+           function(x) kv_fireplace_q[kv_fireplace_q$key == x, ]$value)
+  df$GarageType <- 
+    ifelse(df$GarageType %in% 
+             c("2Types", "Attchd", "Basment", "BuiltIn"), 1, 0)
+  df$GarageFinish <-
+    sapply(df$GarageFinish,
+           function(x) kv_garage_fin[kv_garage_fin$key == x, ]$value)
+  df$GarageQual <- 
+    ifelse(df$GarageQual %in% c("Ex", "Gd", "TA"), 1, 0)
+  df$GarageCond <- 
+    ifelse(df$GarageCond %in% c("Ex", "Gd", "TA"), 1, 0)
+  df$PavedDrive <-
+    sapply(df$PavedDrive,
+           function(x) kv_paved_drive[kv_paved_drive$key == x, ]$value)
+  df$PoolQC <- ifelse(df$PoolQC == "Ex", 1, 0)
+  df$MoSold <- sapply(df$MoSold, function(x) month.name[x])
+  i <- sapply(df, is.character)
+  df[i] <- lapply(df[i], as.factor)
+  
+  # binary coding
+  df$MasVnrArea <- ifelse(df$MasVnrArea > 0, 1, 0)
+  df$MiscVal <- ifelse(df$MiscVal > 0, 1, 0)
+  df$X3SsnPorch <- ifelse(df$X3SsnPorch > 0, 1, 0)
+  df$ScreenPorch <- ifelse(df$ScreenPorch > 0, 1, 0)
+  df$LowQualFinSF <- ifelse(df$LowQualFinSF > 0, 0, 1)
+  
+  ## log transform
+  df$LotArea <- log(df$LotArea)
+  df$GrLivArea <- log(df$GrLivArea)
+  return(df)
+}
+
+drop_outliers <- function(dataset) {
+  df <- dataset
+  df <- df[df$BsmtFinSF1 < 5000, ]
+  df <- df[df$X1stFlrSF < 4000, ]
+  return(df)
+}
+```
+
+```{r dummy-coding}
+library(caret)
+
+train <- replace_missing(train)
+test <- replace_missing(test)
+
+train_facts <- sapply(train[colnames(train[sapply(train, is.factor)])], function(x) sort(unique(x[!is.na(x)])))
+test_facts <- sapply(test[colnames(train[sapply(train, is.factor)])], function(x) sort(unique(x[!is.na(x)])))
+
+for (i in 1:length(test_facts)) {
+  if (length(setdiff(test_facts[[i]], train_facts[[i]])) > 0) {
+    print(names(test_facts)[i])
+  }
+}
+
+unique(train$MSSubClass)
+unique(test$MSSubClass)
+
+train <- recode(train)
+test <- recode(test)
+
+train <- drop_outliers(train)
+
+colSums(sapply(train, is.na))[colSums(sapply(train, is.na)) > 0]
+colSums(sapply(test, is.na))[colSums(sapply(test, is.na)) > 0]
+
+## dummy code categorical variables in `train` and `test` datasets 
+dummies <- dummyVars("~ .", data = rbind(train[, -ncol(train)], test))
+SalePrice <- data.frame(Id = train$Id, SalePrice = train$SalePrice)
+train <- as.data.frame(predict(dummies, newdata = train))
+train <- merge(train, SalePrice, by = "Id")
+test <- as.data.frame(predict(dummies, newdata = test))
+
+(nzv <- nearZeroVar(train, saveMetrics = TRUE))
+nzv_cols <- row.names(nzv[!grepl("Neighborhood", row.names(nzv)) & nzv$nzv, ])
+if(length(nzv_cols) > 0) {
+  train <- train[, -which(names(train) %in% nzv_cols)]
+}
+
+## identify and remove highly correlated predictors from training set
+cor_preds <- cor(train[, -which(names(train) == "SalePrice")])
+high_cor <- findCorrelation(cor_preds, cutoff = 0.80)
+which(colnames(train) %in% 
+        c("GrLivArea", "TotalBsmtSF", 
+          "GarageCars", "FireplaceQu"))
+high_cor <- high_cor[!high_cor %in% c(80, 86, 96, 100)]
+train <- train[, -high_cor]
+```
+
+#### Partition labeled training data
+
+```{r split-training}
+## partition training set for model testing on known sale prices
+split <- createDataPartition(train$SalePrice, p = 0.75, list = FALSE)
+
+training <- train[split, ]
+testing <- train[-split, ]
+```
+
+#### Lookup regression models in _caret_
+
+```{r lookup-regression-algos}
+mods <- modelLookup()
+mods <- mods[mods$forReg == TRUE, ]
+```
+
+#### Use 10-fold repeated cross validation for fitting
+
+```{r fit-control}
+fitControl <- trainControl(method = "repeatedcv",
+                           number = 10,
+                           repeats = 5)
+```
+
+#### Train models
+
+```{r train-models, warning = FALSE}
+library(randomForest)
+library(xgboost)
+library(elasticnet)
+library(glmnet)
+library(doParallel)
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+
+## model training and evaluation on partitioned `train` data
+# err <- data.frame(model = character(0), rmse = numeric(0),
+#                   stringsAsFactors = FALSE)
+# set.seed(2017)
+# lm_fit <- train(log(SalePrice) ~ . - Id, data = training,
+#                 method = "lm",
+#                 preProc = c("center", "scale"),
+#                 trControl = fitControl)
+# lm_fit
+# testing$SalePredict1 <- exp(predict(lm_fit, testing, na.action = na.pass))
+# RMSE(log(testing$SalePredict1), log(testing$SalePrice))
+# sqrt(sum((log(testing$SalePredict1) - log(testing$SalePrice))^2) /
+#        nrow(testing))
+# err[nrow(err) + 1, ] <-
+#   c("lm",
+#     RMSE(log(testing$SalePredict1),
+#          log(testing$SalePrice))
+#   )
+# summary(lm_fit)
+# set.seed(2017)
+# rf_fit <- train(log(SalePrice) ~ . - Id, data = training,
+#                 method = "rf",
+#                 preProc = c("center", "scale"),
+#                 trControl = fitControl)
+# rf_fit
+# testing$SalePredict2 <- exp(predict(rf_fit, testing, na.action = na.pass))
+# RMSE(log(testing$SalePredict2), log(testing$SalePrice))
+# sqrt(sum((log(testing$SalePredict2) - log(testing$SalePrice))^2) /
+#        nrow(testing))
+# 
+# err[nrow(err) + 1, ] <-
+#   c("rf",
+#     RMSE(log(testing$SalePredict2),
+#          log(testing$SalePrice))
+#   )
+# set.seed(2017)
+# xgbLin_fit <- train(log(SalePrice) ~ . - Id, data = training,
+#                     method = "xgbLinear",
+#                     preProc = c("center", "scale"),
+#                     trControl = fitControl)
+# xgbLin_fit
+# testing$SalePredict3 <- exp(predict(xgbLin_fit, testing, na.action = na.pass))
+# RMSE(log(testing$SalePredict3), log(testing$SalePrice))
+# sqrt(sum((log(testing$SalePredict3) - log(testing$SalePrice))^2) /
+#        nrow(testing))
+# 
+# err[nrow(err) + 1, ] <- 
+#   c("xgbLin", 
+#     RMSE(log(testing$SalePredict3),
+#          log(testing$SalePrice))
+#   )
+# set.seed(2017)
+# xgbTree_fit <- train(log(SalePrice) ~ . - Id, data = training,
+#                      method = "xgbTree",
+#                      preProc = c("center", "scale"),
+#                      trControl = fitControl)
+# xgbTree_fit
+# testing$SalePredict4 <- exp(predict(xgbTree_fit, testing, na.action = na.pass))
+# RMSE(log(testing$SalePredict4), log(testing$SalePrice))
+# sqrt(sum((log(testing$SalePredict4) - log(testing$SalePrice))^2) /
+#        nrow(testing))
+# 
+# err[nrow(err) + 1, ] <- 
+#   c("xgbTree", 
+#     RMSE(log(testing$SalePredict4),
+#          log(testing$SalePrice))
+#   )
+# set.seed(2017)
+# ridge_fit <- train(log(SalePrice) ~ . - Id, data = training,
+#                  method = "ridge",
+#                  preProc = c("center", "scale"),
+#                  trControl = fitControl)
+# ridge_fit
+# testing$SalePredict5 <- exp(predict(ridge_fit, testing, na.action = na.pass))
+# RMSE(log(testing$SalePredict5), log(testing$SalePrice))
+# sqrt(sum((log(testing$SalePredict5) - log(testing$SalePrice))^2) /
+#        nrow(testing))
+# 
+# err[nrow(err) + 1, ] <-
+#   c("ridge",
+#     RMSE(log(testing$SalePredict5),
+#          log(testing$SalePrice))
+#   )
+# set.seed(2017)
+# glmnet_fit <- train(log(SalePrice) ~ . - Id, data = training,
+#                  method = "glmnet",
+#                  preProc = c("center", "scale"),
+#                  trControl = fitControl)
+# glmnet_fit
+# testing$SalePredict6 <- exp(predict(glmnet_fit, testing, na.action = na.pass))
+# RMSE(log(testing$SalePredict6), log(testing$SalePrice))
+# sqrt(sum((log(testing$SalePredict6) - log(testing$SalePrice))^2) /
+#        nrow(testing))
+# 
+# err[nrow(err) + 1, ] <-
+#   c("glmnet",
+#     RMSE(log(testing$SalePredict6),
+#          log(testing$SalePrice))
+#   )
+
+# err[order(err$rmse), ]
+
+## examine correlations across model predictions
+# cor(testing[, (ncol(testing)-6):ncol(testing)])
+
+## re-train models on entire training dataset
+set.seed(2017)
+lm_full <- train(log(SalePrice) ~ . - Id, data = train,
+                     method = "lm",
+                     preProc = c("center", "scale"),
+                     trControl = fitControl)
+lm_full
+set.seed(2017)
+rf_full <- train(log(SalePrice) ~ . - Id, data = train,
+                     method = "rf",
+                     preProc = c("center", "scale"),
+                     trControl = fitControl)
+rf_full
+set.seed(2017)
+xgbLin_full <- train(log(SalePrice) ~ . - Id, data = train,
+                     method = "xgbLinear",
+                     preProc = c("center", "scale"),
+                     trControl = fitControl)
+xgbLin_full
+set.seed(2017)
+xgbTree_full <- train(log(SalePrice) ~ . - Id, data = train,
+                     method = "xgbTree",
+                     preProc = c("center", "scale"),
+                     trControl = fitControl)
+xgbTree_full
+set.seed(2017)
+ridge_full <- train(log(SalePrice) ~ . - Id, data = train,
+                     method = "ridge",
+                     preProc = c("center", "scale"),
+                     trControl = fitControl)
+ridge_full
+set.seed(2017)
+glmnet_full <- train(log(SalePrice) ~ . - Id, data = train,
+                     method = "glmnet",
+                     preProc = c("center", "scale"),
+                     trControl = fitControl)
+glmnet_full
+
+stopCluster(cl)
+```
+
+#### Make predictions & output to CSV
+
+```{r make-predictions}
+## linear model prediction
+# test$SalePrice <- exp(predict(lm_full, test, na.action = na.pass))
+# test <- test[, which(names(test) %in% names(train))]
+
+## xgbTree prediction
+# test$SalePrice <- exp(predict(xgbTree_full, test, na.action = na.pass))
+# test <- test[, which(names(test) %in% names(train))]
+
+## combine model predictions by finding mean prediction for each property
+test$SalePrice <- exp(
+  rowMeans(data.frame(
+    predict(lm_full, test, na.action = na.pass),
+    predict(rf_full, test, na.action = na.pass),
+    predict(xgbLin_full, test, na.action = na.pass),
+    predict(xgbTree_full, test, na.action = na.pass),
+    predict(ridge_full, test, na.action = na.pass),
+    predict(glmnet_full, test, na.action = na.pass)),
+    na.rm = TRUE)
+)
+
+predictions <- data.frame(Id = test$Id, SalePrice = test$SalePrice)
+head(predictions)
+predictions[is.na(predictions$SalePrice), ]
+
+## save output, change filename as needed
+write.csv(predictions, file = "Submission_052317_avg.csv", quote = FALSE, row.names = FALSE)
+```
